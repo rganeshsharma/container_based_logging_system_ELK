@@ -1,0 +1,116 @@
+STEP 1:
+# Import the Elasticsearch GPG Key on all the nodes:
+rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch
+
+STEP 2:
+# Download and Install RPM manually:
+wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.10.0-x86_64.rpm
+rpm --install elasticsearch-7.10.0-x86_64.rpm
+
+STEP 3:
+# Create a symlink by enabling elasticsearch to begin at restart:
+systemctl enable elasticsearch
+
+STEP 4:
+# Configure and Start a Multi-Node Cluster:
+cd etc/elasticsearch/
+vi elasticsearch.yml
+
+cluster.name: playground
+node.name: elkmaster /elkdata1 /elkdaat2
+network.host: [_local_, _site_]
+discovery.seed_hosts: ["172.16.1.15"]
+cluster.initial_master_nodes: ["172.16.1.15"]
+network.publish_host: 
+node.master: true /false
+node.data: true /false
+node.ingest: true /false
+node.ml: false
+
+# Decrease the size of jvm heap of master node as Kibana will use more memory:
+vi jvm.options
+768mc and 768MB for CPU and memory
+
+# start elkmaster:
+systemctl start elasticsearch
+
+# Check if the cluster is working:
+curl -X GET 'http://localhost:9200'
+curl localhost:9200/_cat/nodes/?v
+
+STEP 5:
+# Deploy Kibana in Elasticsearch master node:
+wget https://artifacts.elastic.co/downloads/kibana/kibana-7.10.0-x86_64.rpm
+rpm --install kibana-7.10.0-x86_64.rpm
+
+# Edit kibana.yaml in /etc/kibana/
+server.port: 5601
+server.host: "172.16.1.15"
+
+Copy the global.crt and global.key to master node:
+The directory permissions should be 700, the file permissions on all the files should be 600, and the directory and files should be owned by root.
+systemctl start kibana
+
+# Access Kibana Dashboard:
+http://<Public IP of Kibana master>:5601
+
+STEP 6: 
+# Add TLS and SSH to our Kibana and Elasticsearch and secure the traffic between the:
+cd /usr/share/elasticsearch/bin/
+
+# Create ca using existing elastic certutil :
+/usr/share/elasticsearch/bin/elasticsearch-certutil ca --out /etc/elasticsearch/ca --pass elastic_ca
+
+# Update DNS names in hosts files using private address:
+172.16.1.15 elkmaster.test.app.gotteron.ch
+172.16.1.16 elkdata1.test.app.gotteron.ch
+172.16.1.17 elkdaat2.test.app.gotteron.ch
+
+
+elkmaster.test.app.gotteron.ch    51.103.131.18     172.16.1.15
+elkdata1.test.app.gotteron.ch    51.103.157.133    172.16.1.16
+elkdaat2.test.app.gotteron.ch   51.103.132.211    172.16.1.17
+
+# Configure and generate certificate for elkmaster, elkdata1 and elkdaat2
+/usr/share/elasticsearch/bin/elasticsearch-certutil cert --ca /etc/elasticsearch/ca --ca-pass elastic_ca --name elkmaster.test.app.gotteron.ch --ip 172.16.1.15 --out /etc/elasticsearch/elkmastercert --pass elastic_master_ca
+
+/usr/share/elasticsearch/bin/elasticsearch-certutil cert --ca /etc/elasticsearch/ca --ca-pass elastic_ca --name elkdata1.test.app.gotteron.ch --ip 172.16.1.16 --out /etc/elasticsearch/eldata1cert --pass elastic_data1_ca
+
+/usr/share/elasticsearch/bin/elasticsearch-certutil cert --ca /etc/elasticsearch/ca --ca-pass elastic_ca --name elkdaat2.test.app.gotteron.ch --ip 172.16.1.17 --out /etc/elasticsearch/elkdata2cert --pass elastic_data2_ca
+
+# Change ownership to azureuser and copy to respective data nodes:
+
+chown azureuser:azureuser eldata1cert
+chown azureuser:azureuser elkdata2cert
+
+# Move certs to tmp directory and change username back to azureuser to copy certificates data nodes
+[root@elkmaster ~]# mv /etc/elasticsearch/eldata1cert /tmp/
+[root@elkmaster ~]# mv /etc/elasticsearch//elkdata2cert /tmp/
+
+
+scp /tmp/eldata1cert azureuser@172.16.1.16:/etc/elasticsearch/
+scp /tmp/elkdata2cert azureuser@172.16.1.17:/etc/elasticsearch/
+
+
+chown root:elasticsearch eldata1cert
+chown root:elasticsearch elkdata2cert
+
+# Secure traffic using TLS:
+# Provvide elasticsearch group read access to our certificates:
+chmod 640 elkmastercert
+chmod 640 eldata1cert
+chmod 640 elkdata2cert
+
+# Add xpack parameters in elasticsearch.yaml file:
+
+xpack.security.enabled: true
+xpack.security.transport.ssl.enabled: true
+xpack.security.transport.ssl.verification_mode: full/certificate
+xpack.security.transport.ssl.keystore.path: elkmastercert
+xpack.security.transport.ssl.truststore.path: elkmastercert
+
+# Add the passphrase to elasticsearch keystore on all the nodes and provide elastic_master_ca/elastic_data1_ca/elastic_data2_ca as passwords:
+/usr/share/elasticsearch/bin/elasticsearch-keystore add xpack.security.transport.ssl.keystore.secure_password
+/usr/share/elasticsearch/bin/elasticsearch-keystore add xpack.security.transport.ssl.truststore.secure_password
+
+systemctl restart elasticsearch

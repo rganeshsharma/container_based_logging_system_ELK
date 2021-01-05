@@ -1,0 +1,226 @@
+Reference : https://www.elastic.co/blog/how-to-run-elastic-cloud-on-kubernetes-from-azure-kubernetes-service
+
+Many ways to deploy ELK on AKS : Helm charts or using the latest Kubernetes Operator called ELK Cloud
+1) Create an Azure Kubernetes Service cluster or use existing AKS cluster
+2) Install Elastic Cloud on Kubernetes
+3) Create an Elasticsearch cluster
+4) Deploy Kibana
+5) Create an Azure VM for us to monitor
+6) Deploy Metric beat to collect VM metrics, and events
+
+
+AKS Cluster SP:
+
+Display name : elk-clusterSP-20201110204250
+Application (client) ID : 2eb421d9-ec4d-41fc-8e3d-7a8a1cdbce6a
+Directory (tenant) ID : 105b2061-b669-4b31-92ac-24d304d195dc
+Object ID: f5a75c11-ebec-492b-a447-61175b9e79c3
+Application ID URI: http://elk-clusterSP-20201110204250
+Managed Application : elk-clusterSP-20201110204250
+Clinet Secret : .Y_ri0z10XM6N-E33ukMCddQY2.-8H8eWl
+
+
+Step 1: Create an AKS cluster
+az aks create --resource-group rg-hcfg --name elk-cluster --node-count 3 --generate-ssh-keys
+
+Step 2: Connect to the AKS cluster
+az aks get-credentials --resource-group rg-hcfg --name elk-cluster
+
+Step 3: Install the ECK operator
+kubectl apply -f https://download.elastic.co/downloads/eck/1.1.2/all-in-one.yaml
+elastic-system namespace created 
+kubectl -n elastic-system logs -f statefulset.apps/elastic-operator
+
+Step 4: Create an Elasticsearch cluster with a external IP
+We're using the default load balancer that is available with Azure Kubernetes Service.
+
+# elastic-cloud.yaml
+apiVersion: elasticsearch.k8s.elastic.co/v1 
+kind: Elasticsearch 
+metadata: 
+  name: quickstart 
+spec: 
+  version: 7.7.0 #Make sure you use the version of your choice 
+  http: 
+    service: 
+      spec: 
+        type: LoadBalancer #Adds a External IP 
+  nodeSets: 
+  - name: default 
+    count: 1 
+    config: 
+      node.master: true 
+      node.data: true 
+      node.ingest: true 
+      node.store.allow_mmap: false 
+
+kubectl apply -f elastic-cloud.yaml
+elasticsearch.elasticsearch.k8s.elastic.co/quickstart created
+
+Step 5: Monitor the cluster creation
+kubectl get elasticsearch 
+kubectl get pods -w
+
+Step 6: Check the logs of the pod created
+kubectl logs -f quickstart-es-default-0 
+kubectl get service quickstart-es-http
+
+Step 7: Retrieve the password of Elasticsearch cluster
+PASSWORD=$(kubectl get secret quickstart-es-elastic-user -o=jsonpath='{.data.elastic}' | base64 --decode)
+uE2h13O6m6xP13R16WQ4SKLR
+curl -u "elastic:$PASSWORD" -k "https://52.137.58.173:9200" # External IP adress of our ELK cluster
+
+
+  "name" : "quickstart-es-default-0",
+  "cluster_name" : "quickstart",
+  "cluster_uuid" : "v2sGCaEKRd-mLScrHl6j2g",
+  "version" : {
+    "number" : "7.9.2",
+    "build_flavor" : "default",
+    "build_type" : "docker",
+    "build_hash" : "d34da0ea4a966c4e49417f2da2f244e3e97b4e6e",
+    "build_date" : "2020-09-23T00:45:33.626720Z",
+    "build_snapshot" : false,
+    "lucene_version" : "8.6.2",
+    "minimum_wire_compatibility_version" : "6.8.0",
+    "minimum_index_compatibility_version" : "6.0.0-beta1"
+  },
+  "tagline" : "You Know, for Search"
+}
+
+
+Step 8: Deploy Kibana
+
+# Kibana.yaml
+
+apiVersion: kibana.k8s.elastic.co/v1 
+kind: Kibana 
+metadata: 
+  name: quickstart 
+spec: 
+  version: 7.7.0 #Make sure Kibana and Elasticsearch are on the same version. 
+  http: 
+    service: 
+      spec: 
+        type: LoadBalancer #Adds a External IP 
+  count: 1 
+  elasticsearchRef: 
+    name: quickstart
+
+kubectl apply -f kibana.yaml
+
+Step 9: Monitor the Kibana deployment
+
+kubectl get kibana
+
+
+kubectl all service:
+NAME                      TYPE           CLUSTER-IP    EXTERNAL-IP     PORT(S)          AGE
+kubernetes                ClusterIP      10.0.0.1      <none>          443/TCP          77d
+quickstart-es-default     ClusterIP      None          <none>          <none>           12m
+quickstart-es-http        LoadBalancer   10.0.13.14    52.137.58.173   9200:31586/TCP   12m
+quickstart-es-transport   ClusterIP      None          <none>          9300/TCP         12m
+quickstart-kb-http        LoadBalancer   10.0.66.226   51.137.3.150    5601:32416/TCP   5m38s
+
+Step 10: DNS Mapping 
+Create a new DNS entry for Kibana external IP
+Accesss the kibana-test.app.ggotteron.ch
+
+Step 11 : Adding certificate 
+Create new secret :
+
+kubectl create secret tls elk-secret --namespace default --key global.key --cert global.crt --from-literal=password=Kibana@123 --from-literal=username=elastic
+secret/elk-secret created
+or
+
+# elk-secret.yaml
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: elk-secret
+data:
+  username: elastic
+  password: Kibana@123
+
+
+Step 12: Edit the Kibana service and apply for secretName and restart the deployment
+
+az vmss extension set  \
+    --resource-group MC_rg-hcfg_test_westeurope \
+    --vmss-name aks-agentpool-20139558-vmss \
+    --name VMAccessForLinux \
+    --publisher Microsoft.OSTCExtensions \
+    --version 1.4 \
+    --protected-settings "{\"username\":\"azureuser\", \"ssh_key\":\"$(cat ~/.ssh/id_rsa.pub)\"}"
+
+    az aks update -n test -g MC_rg-hcfg_test_westeurope --attach-acr hcfgtest
+
+STEP 13: Download and Install Filebeat, Metricbeat on the AKS nodes:
+curl -L -O https://raw.githubusercontent.com/elastic/beats/7.10/deploy/kubernetes/filebeat-kubernetes.yaml
+
+# Edit the filebeat-kubernetes.yaml file and change the following:
+
+    spec:
+      serviceAccountName: filebeat
+      terminationGracePeriodSeconds: 30
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+      - name: filebeat
+        image: docker.elastic.co/beats/filebeat:7.10.0 # check in docker hub for filebeat
+
+namespace = should be the same namespace that elk and kibana are running
+    output.elasticsearch:
+      hosts: ['${ELASTICSEARCH_HOST:elasticsearch}:${ELASTICSEARCH_PORT:9200}']
+      username: ${ELASTICSEARCH_USERNAME}
+      password: ${ELASTICSEARCH_PASSWORD}
+      ssl.certificate_authorities:
+        - /home/ganesh-r_sharma/certificates/global.crt
+
+# Adding a volume that will mount our secret:
+
+      volumes:
+      - name: certs
+        secret:
+          secretName: quickstart-es-http-certs-public
+
+# After adding the colume with secret mount it under volumeMounts:
+
+        volumeMounts:
+        - name: certs
+          mountPath: /home/ganesh-r_sharma/certificates/global.crt
+          readOnly: true
+          subPath: global.crt
+
+# Add env variables in the following :
+        env:
+        - name: ELASTICSEARCH_HOST
+          value: https://quickstart-es-http
+        - name: ELASTICSEARCH_PORT
+          value: "9200"
+        - name: ELASTICSEARCH_USERNAME
+          value: elastic
+        - name: ELASTICSEARCH_PASSWORD
+          value: uE2h13O6m6xP13R16WQ4SKLR
+        - name: ELASTIC_CLOUD_ID
+          value:
+        - name: ELASTIC_CLOUD_AUTH
+          value:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        securityContext:
+          runAsUser: 0
+
+kubectl apply -f filebeat-kubernetes.yaml
+configmap/filebeat-config created
+daemonset.apps/filebeat created
+clusterrolebinding.rbac.authorization.k8s.io/filebeat created
+clusterrole.rbac.authorization.k8s.io/filebeat created
+serviceaccount/filebeat created
+
+# STEP 14 : 
+
+

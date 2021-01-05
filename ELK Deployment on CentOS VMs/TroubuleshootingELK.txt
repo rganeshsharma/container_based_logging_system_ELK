@@ -1,0 +1,18 @@
+$ curl -X POST api/spaces/space
+{
+  "id": "hcfg-prod",
+  "name": "hcfg",
+  "description" : "This is the hcfg Space",
+}
+
+$ curl -X POST http://51.138.0.125:5601/api/spaces/space
+
+
+
+/home/ganesh-r_sharma/.ssh/id_rsa.pub
+
+
+# Add continer Insights:
+az login
+az account set --subscription f929d8ed-249d-458a-9a1a-ddb51c3d58e2
+curl -sL https://aka.ms/ci-md-onboard-atscale | bash -s subscriptionId

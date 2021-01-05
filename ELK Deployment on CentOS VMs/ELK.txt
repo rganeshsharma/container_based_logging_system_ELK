@@ -1,0 +1,41 @@
+-----------------------------------------------------------------------
+Overview:
+ELK: Elastic search , Logstash and Kibana
+Logstash: Data Processing Pipeline
+Elasticsearch: search and analytics engine
+Kibana: Visulaize and manage
+Store and Analyze data inside ELK
+
+-----------------------------------------------------------------------
+
+Architechture and Concepts:
+Two main types of nodes in ELK:
+1) Master eligible nodes: Take up Master roles, it takes care of where the data is, repliaction, metadata etc
+2) Data node: is responsible for storing and searching all the data, heavy read write IO operations are performed
+
+
+How data is stored?
+
+Data is stored inside ELK as indexes and the data is stored as Shards inside indexes
+Each index may contain multiple shards 
+All replicas of a Shard must reside on different data node
+In case of failure of one of the node then 
+Master will make a existing replica shard as primary which will again start new replica Shard on a differnet data node
+States of Indexes determine the state of teh cluster :
+Green - All primary and replicated shards are allocated
+Yellow - Not all replication shards are allocated
+Red - Missing Primary shards and there are no replica shards to promote and this occurs with data loss
+
+
+-----------------------------------------------------------------------
+
+
+
+
+-----------------------------------------------------------------------
+
+
+
+
+
+-----------------------------------------------------------------------
