@@ -31,4 +31,4 @@ ELK storage used and why? (PV in Azure File storage)
 Backup and DR startegy?
 Retention policy set?
 
-visit www.virtualgyaan.com for more details
+visit http://virtualgyaan.com/introduction-to-elk-stack/ for more details
