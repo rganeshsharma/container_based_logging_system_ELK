@@ -2,23 +2,6 @@
 ELK Deepdive
 Complete guide to develop and deploy ELK solutionon On-premise and Hyperscalers environment
 
-Deployment:
-ELK deployment on Cent OS based VM's
-ELK deployment on Azure AKS 
-
-ELK Architechture, configuration and functionality of each components?
-ELK sizing? Scaling up?
-ELK storage used and why? (PV in Azure File storage)
-Backup and DR startegy?
-Retention policy set?
-
-visit www.virtualgyaan.com for more details
-
-
-Introduction :
-In this series of posts on ELK we will look at the basic introduction to ELK, the concepts around ELK and types of deployment that ELK supports. We will explore on the strategies around deployment of ELK. In further parts we will see a VM based ELK deployment and ELK Cloud deployment on Microsoft Azure AKS which uses Kubernetes operator at the backend for deploying ELK. This post highlights introduction and basic deployment strategies of ELK.
-
-
 ELK is one of the most popular cloud monitoring solutions that is used to store, monitor and analyze both metrics and logs from a variety of cloud and on-premise resources. Broadly the ELK Stack comprises of Elasticsearch, Logstash, Beats and Kibana. The basic functionality of each of these components of ELK stack is as follows :
 Elasticsearch is the heart of the solution which comprises of a distributed JSON based search and analytics engine. It acts like a central repository for storing data and helps us query any details from it.
 These data can be logs, metrics, Application Performance Metrics and many more
@@ -36,3 +19,16 @@ Create Visualizations by dragging and dropping the appropriate fields
 Create Dashboards which can be a combination of number of Visualizations
 Query the cluster using CRUD style APIs
 Create Alerts to trigger specific actions
+
+
+Deployment:
+ELK deployment on Cent OS based VM's
+ELK deployment on Azure AKS 
+
+ELK Architechture, configuration and functionality of each components?
+ELK sizing? Scaling up?
+ELK storage used and why? (PV in Azure File storage)
+Backup and DR startegy?
+Retention policy set?
+
+visit www.virtualgyaan.com for more details
